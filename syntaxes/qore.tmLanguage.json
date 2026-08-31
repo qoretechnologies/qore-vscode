@@ -5,8 +5,11 @@
         { "include": "#implicit_args" },
         { "include": "#comments" },
         { "include": "#parse_options" },
+        { "include": "#compile_time" },
         { "include": "#regexps" },
         { "include": "#binary" },
+        { "include": "#chars" },
+        { "include": "#backquotes" },
         { "include": "#keywords" },
         { "include": "#operators" },
         { "include": "#strings" },
@@ -25,6 +28,15 @@
                 {
                     "match": "<([0-9A-Fa-f][0-9A-Fa-f])+>",
                     "name": "constant.numeric.binary.qore"
+                }
+            ]
+        },
+        "backquotes": {
+            "patterns": [
+                {
+                    "begin": "`",
+                    "end": "`",
+                    "name": "string.interpolated.command.qore"
                 }
             ]
         },
@@ -89,6 +101,14 @@
                 }
             ]
         },
+        "compile_time": {
+            "patterns": [
+                {
+                    "match": "@(assert|debug)\\b",
+                    "name": "keyword.control.compile-time.qore"
+                }
+            ]
+        },
         "comment_tags": {
             "patterns": [
                 {
@@ -116,8 +136,24 @@
                     "name": "constant.language.null.qore"
                 },
                 {
-                    "match": "\\bNT_(BINARY|BOOLEAN|CALLREF|CLOSURE|DATE|FLOAT|INT|HASH|LIST|NOTHING|NULL|NUMBER|OBJECT|STRING)\\b",
+                    "match": "\\bNT_(BINARY|BOOLEAN|BUFFER|CALLREF|CHAR|CLOSURE|DATE|FLOAT|INT|HASH|LIST|NOTHING|NULL|NUMBER|OBJECT|STRING)\\b",
                     "name": "constant.language.types.qore"
+                },
+                {
+                    "match": "@(inf|nan)@",
+                    "name": "constant.numeric.float.qore"
+                }
+            ]
+        },
+        "chars": {
+            "patterns": [
+                {
+                    "match": "\\bc'(?:\\\\.|[^'\\\\])*'",
+                    "name": "constant.character.qore"
+                },
+                {
+                    "match": "\\bc\"(?:\\\\.|[^\"\\\\])*\"",
+                    "name": "constant.character.qore"
                 }
             ]
         },
@@ -321,7 +357,7 @@
         "escaped_chars": {
             "patterns": [
                 {
-                    "match": "\\\\([0-7]{3}|[0-7]{2}|[0-7]|[\"\\\\bfnrtv])",
+                    "match": "\\\\(x[0-9A-Fa-f]{1,2}|u\\{[0-9A-Fa-f]{1,6}\\}|u[0-9A-Fa-f]{4}|U[0-9A-Fa-f]{8}|[0-7]{1,3}|.)",
                     "name": "constant.character.escape.qore"
                 }
             ]
@@ -329,7 +365,7 @@
         "format_chars": {
             "patterns": [
                 {
-                    "match": "(%[aAdfFgGnNsxXy])",
+                    "match": "(%[aAdfFgGnNsxXyY])",
                     "name": "constant.character.format.qore"
                 }
             ]
@@ -384,6 +420,10 @@
                 {
                     "match": "\\b(background|chomp|elements|exists|extract|fold(l|r)|instanceof|keys|map|pop|push|remove|select|splice|(un)?shift|trim)\\b",
                     "name": "keyword.operator.qore"
+                },
+                {
+                    "match": "\\b(iterate|first|last|one|all|count|take|drop|takewhile|takeuntil)\\b",
+                    "name": "keyword.operator.streaming.qore"
                 },
                 {
                     "match": "\\bnew\\b",
@@ -654,15 +694,19 @@
                     "name": "storage.type.subroutine.qore"
                 },
                 {
+                    "match": "\\b(enum|typedef)\\b",
+                    "name": "storage.type.declaration.qore"
+                },
+                {
                     "match": "\\b(inherits|returns)\\b",
                     "name": "storage.type.special.qore"
                 },
                 {
-                    "match": "\\b(binary|bool|date|float|hash|int|list|number|string)\\b",
+                    "match": "\\b(binary|bool|buffer|char|date|decimal128|float|float32|float64|hash|int|int8|int16|int32|int64|list|number|string|union)\\b",
                     "name": "storage.type.primitive.qore"
                 },
                 {
-                    "match": "\\bsoft(bool|date|float|hash|int|list|number|string)\\b",
+                    "match": "\\bsoft(bool|char|date|float|hash|int|list|number|string)\\b",
                     "name": "storage.type.primitive.soft.qore"
                 },
                 {
@@ -708,6 +752,10 @@
             "begin": "\"",
             "end": "\"",
             "patterns": [
+                {
+                    "match": "\\$(?:[A-Za-z_][A-Za-z0-9_]*|\\{[^}]+\\}|\\([^)]*\\))",
+                    "name": "variable.other.interpolation.qore"
+                },
                 {
                     "include": "#escaped_chars"
                 },

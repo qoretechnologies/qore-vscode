@@ -1,4 +1,0 @@
-[submodule "qls"]
-	path = qls
-	url = git@github.com:qorelanguage/qls.git
-	branch = develop

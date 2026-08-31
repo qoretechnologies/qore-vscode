@@ -1,12 +1,21 @@
+/* QoreLaunchConfig.ts Copyright 2026 Qore Technologies, s.r.o. */
+
+import { mergeLaunchEnvironment, QoreEnvironment } from './qore3';
+
+export interface QoreLaunchOptions {
+    cwd?: string;
+    env?: QoreEnvironment;
+    shell: false;
+}
 
 export class QoreLaunchConfig {
     //! qore executable
     private _qoreExec: string = "qore";
 
     //! env needed for launching qore
-    private _launchEnv: object | undefined = undefined;
+    private _launchEnv: NodeJS.ProcessEnv | undefined = undefined;
 
-    constructor(qoreExec: string, launchEnv?: object | undefined) {
+    constructor(qoreExec: string, launchEnv?: NodeJS.ProcessEnv) {
         this._qoreExec = qoreExec;
         this._launchEnv = launchEnv;
     }
@@ -15,19 +24,14 @@ export class QoreLaunchConfig {
         return this._qoreExec;
     }
 
-    getLaunchEnv(): object | undefined {
+    getLaunchEnv(): NodeJS.ProcessEnv | undefined {
         return this._launchEnv;
     }
 
-    getLaunchOptions(): object | undefined {
-        if (this._launchEnv === undefined) {
-            return {
-                shell: true
-            };
-        }
+    getLaunchOptions(): QoreLaunchOptions {
         return {
-            env: this._launchEnv,
-            shell: true
+            env: mergeLaunchEnvironment(this._launchEnv),
+            shell: false,
         };
     }
 }

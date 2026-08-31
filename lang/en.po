@@ -13,83 +13,8 @@ msgstr "Using locale settings '${ locale }'"
 msgid "UsingDefaultLocale ${ locale }"
 msgstr "Using default locale '${ locale }'"
 
-msgid "QoreExecutable ${ executable }"
-msgstr "Qore executable: ${ executable }"
-
-msgid "StartingQLS"
-msgstr "Starting QLS."
-
-msgid "StartingQLSVscPkg"
-msgstr "Starting QLS using Qore VSCode package."
-
-msgid "StartingQLSWithExe ${ executable }"
-msgstr "Starting QLS with Qore executable: ${ executable }"
-
-msgid "StartedQLS"
-msgstr "Started QLS."
-
-msgid "StartedLanguageClient"
-msgstr "Started language client for QLS."
-
 msgid "QLSAlreadyStarted"
 msgstr "QLS is already running."
-
-msgid "StoppingQLS"
-msgstr "Stopping QLS."
-
-msgid "StoppedQLS"
-msgstr "Stopped QLS."
-
-msgid "QLSAlreadyStopped"
-msgstr "QLS is already stopped."
-
-msgid "QoreNotOkInstallQoreVscPkg"
-msgstr "Qore is necessary for the Qore and Qorus extensions to work correctly. Do you want to automatically download and install Qore VSCode package?"
-
-msgid "QoreVscPkgAlreadyInstalled"
-msgstr "Qore VSCode package is already installed."
-
-msgid "LatestQoreVscPkgInstalled"
-msgstr "Latest Qore VSCode package is already installed."
-
-msgid "QoreVscPkgInstallSuccess"
-msgstr "Successfully installed Qore VSCode package."
-
-msgid "QoreVscPkgInstallFailed"
-msgstr "Qore VSCode package installation failed"
-
-msgid "FailedDownloadQoreVscPkg"
-msgstr "Failed downloading Qore VSCode package."
-
-msgid "FailedExtractionQoreVscPkg"
-msgstr "Failed extracting Qore VSCode package."
-
-msgid "FailedMoveOptQoreVscPkg"
-msgstr "Failed moving the Qore VSCode package to /opt directory"
-
-msgid "FailedRemoveOldQoreVscPkg"
-msgstr "Failed removing old Qore VSCode package."
-
-msgid "TryAgainQoreVscPkgInstall"
-msgstr "Do you want to try installing Qore VSCode package again?"
-
-msgid "QoreAndModulesNotFound"
-msgstr "Qore and necessary modules are unavailable. Qore Language Server will not be started."
-
-msgid "InstallAlreadyInProgress"
-msgstr "Installation of Qore VSCode package is already in progress."
-
-msgid "DloadingQoreVscPkg"
-msgstr "Downloading Qore VSCode package."
-
-msgid "ExtractedQoreVscPkg"
-msgstr "Successfully extracted Qore VSCode package."
-
-msgid "InstallingQoreVscPkg"
-msgstr "Installing Qore VSCode package."
-
-msgid "RemovingOldQoreVscPkg"
-msgstr "Removing old Qore VSCode package."
 
 msgid "DebugAdapterNotFound ${ debugAdapter }"
 msgstr "Adapter '${ debugAdapter }' not found, Debugging support is disabled."
@@ -100,7 +25,7 @@ msgstr "Please enter the name of a Qore file in the workspace folder"
 msgid "ConnectionPlaceHolder"
 msgstr "Please enter the connection name to Qore debug server"
 
-msgid "ProgramPlaceholeder"
+msgid "ProgramPlaceHolder"
 msgstr "Please enter the name of a Qore program or program id"
 
 msgid "ConnectionNotSpecified"

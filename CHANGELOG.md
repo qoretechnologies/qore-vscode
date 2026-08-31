@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.9.0 (2026-08-31)
+
+- Requires Qore 3.0 or newer and validates the configured interpreter version before use.
+- Migrated from the bundled `qls` submodule to Qore's integrated `QLS` module, including its integrated
+  `astparser` dependency.
+- Launches `QLS::QLSServer` with the configured Qore interpreter directly, without a shell or a separate
+  PATH-selected wrapper.
+- Makes language-client startup, readiness, shutdown, API requests, and configuration restarts deterministic.
+- Uses LSP notifications and canonical URIs for synthetic document-symbol requests.
+- Adds `.qr` and synchronizes all 16 Qore/Qorus source extensions with QLS and astparser.
+- Adds Qore 3 syntax highlighting and snippets for enums, typedefs, character and buffer types, Unicode
+  escapes, streaming operators, `@assert`, and `@debug`.
+- Updates the Node 24 build/test/package toolchain and adds unit and live Qore 3/QLS integration coverage.
+- Removes the obsolete Qore 1.16 packaged-runtime installer.
+
 ## 0.8.4
 
 - fixed bugs when there were UNIX socket files in directories to be scanned

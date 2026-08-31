@@ -7,3 +7,9 @@
 **/.gitignore
 **/.gitmodules
 **/.vscode
+node_modules
+out
+dist/*.map
+.gitpod.yml
+icon1000.png
+icon256.png

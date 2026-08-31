@@ -1,5 +1,7 @@
+/* extension.ts Copyright 2026 Qore Technologies, s.r.o. */
+
 import { spawnSync } from 'child_process';
-import { existsSync, readFileSync } from 'fs-extra';
+import { existsSync, readFileSync } from 'fs';
 import * as gettext_parser from 'gettext-parser';
 import { join } from 'path';
 import { t, addLocale, useLocale } from 'ttag';
@@ -20,24 +22,20 @@ import {
     WorkspaceFolder
 } from 'vscode';
 
-import { getDocumentSymbolsImpl, QoreTextDocument } from './documentSymbols';
+import {
+    DocumentSymbolReturnType,
+    getDocumentSymbolsImpl,
+    QoreTextDocument,
+} from './documentSymbols';
 import { QLSManager } from './QLSManager';
 import { QoreLaunchConfig } from './QoreLaunchConfig';
 import {
     checkDebuggerWithLaunchConfig,
+    checkQLSWithLaunchConfig,
     checkQoreLaunchConfig,
 } from './qoreChecks';
-import {
-    getInstalledQoreVscPkgVersion,
-    getLatestQoreVscPkgVersion,
-    getQoreVscPkgEnv,
-    getQoreVscPkgQoreExecutable,
-    installQoreVscPkg,
-    isQoreVscPkgInstalled,
-    plaformHasQoreVscPkg
-} from './qoreVscPkg';
 import * as msg from './qore_message';
-import { compareVersion, findScript, openInBrowser } from './utils';
+import { findScript } from './utils';
 
 let qlsManager: QLSManager = new QLSManager();
 let qoreLaunchCfg: QoreLaunchConfig | undefined = undefined;
@@ -103,160 +101,64 @@ function setLocale() {
     }
 }
 
-function setupQoreLaunchConfig(extensionPath: string) {
+function setupQoreLaunchConfig() {
     if (qoreLaunchCfg !== undefined) {
-        let configOk = checkQoreLaunchConfig(qoreLaunchCfg);
+        const configOk = checkQoreLaunchConfig(qoreLaunchCfg);
         if (configOk) {
             return;
         }
         qoreLaunchCfg = undefined;
     }
 
-    let qoreExec: string = workspace.getConfiguration("qore").get("executable") || "qore";
+    const configuredExecutable = workspace.getConfiguration('qore').get<string>('executable', 'qore');
+    const qoreExec = configuredExecutable.trim() || 'qore';
 
     // check base config
-    let launchConfig = new QoreLaunchConfig(qoreExec);
-    let configOk = checkQoreLaunchConfig(launchConfig);
-    if (configOk) {
-        qoreLaunchCfg = launchConfig;
-        return;
-    }
-
-    // check Qore VSCode package config
-    launchConfig = new QoreLaunchConfig(
-        getQoreVscPkgQoreExecutable(extensionPath),
-        getQoreVscPkgEnv(extensionPath)
-    );
-    configOk = checkQoreLaunchConfig(launchConfig);
+    const launchConfig = new QoreLaunchConfig(qoreExec);
+    const configOk = checkQoreLaunchConfig(launchConfig);
     if (configOk) {
         qoreLaunchCfg = launchConfig;
         return;
     }
 }
 
-function qoreVscPkgInstallation(extensionPath: string) {
-    const install = function(messageToShow: string, showError: boolean, onSuccess, onError) {
-        const installThen = async selection => {
-            if (selection != "Yes") {
-                return;
-            }
-
-            // stop QLS if it's running
-            await qlsManager.stop();
-
-            installQoreVscPkg(extensionPath, onSuccess, onError);
-        };
-        if (showError) {
-            window.showErrorMessage(messageToShow, "Yes", "No").then(
-                installThen,
-                err => { msg.logPlusConsole(String(err)); }
-            );
-        }
-        else {
-            window.showWarningMessage(messageToShow, "Yes", "No").then(
-                installThen,
-                err => { msg.logPlusConsole(String(err)); }
-            );
-        }
-    };
-    const installOk = () => {
-        setupQoreLaunchConfig(extensionPath);
-        if (qoreLaunchCfg !== undefined) {
-            qlsManager.startWithLaunchConfig(extensionPath, qoreLaunchCfg);
-        }
-    };
-    let installErr = () => {
-        install(t`TryAgainQoreVscPkgInstall`, true, installOk, installErr);
-    };
-
-    install(t`QoreNotOkInstallQoreVscPkg`, false, installOk, installErr);
-}
-
-function doQLSLaunch(extensionPath: string, useQLS, launchOnly: boolean) {
-    setupQoreLaunchConfig(extensionPath);
+async function doQLSLaunch(useQLS: boolean): Promise<void> {
+    setupQoreLaunchConfig();
 
     // check if QLS should be used
     if (!useQLS) {
         return;
     }
 
-    if (qoreLaunchCfg !== undefined) {
-        qlsManager.startWithLaunchConfig(extensionPath, qoreLaunchCfg);
+    if (!qoreLaunchCfg) {
+        msg.warning(`Qore 3.0 or newer was not found; configure 'qore.executable'.`);
+        return;
     }
-    else if (!launchOnly) {
-        if (plaformHasQoreVscPkg()) { // offer installing Qore VSCode package
-            qoreVscPkgInstallation(extensionPath);
-        }
-        else {
-            msg.warning(t`QoreAndModulesNotFound`);
-            openInBrowser('https://github.com/qorelanguage/qore-vscode/wiki/Visual-Code-for-Qore-Language-Setup');
-        }
+    if (!checkQLSWithLaunchConfig(qoreLaunchCfg)) {
+        msg.warning('The configured Qore installation cannot load the integrated QLS module.');
+        return;
+    }
+    try {
+        await qlsManager.startWithLaunchConfig(qoreLaunchCfg);
+    } catch (error) {
+        msg.error(`Failed to start QLS: ${String(error)}`);
     }
 }
 
 function registerCommands(context: ExtensionContext) {
-    // install Qore VSCode package command
-    // only installs if it is not installed yet, otherwise shows a warning
-    context.subscriptions.push(commands.registerCommand('qore-vscode.installQoreVscPkg', async _config => {
-        if (!plaformHasQoreVscPkg()) {
-            return;
-        }
-        if (isQoreVscPkgInstalled(context.extensionPath)) {
-            msg.warning(t`QoreVscPkgAlreadyInstalled`);
-            return;
-        }
-
-        // stop QLS if it's running
-        await qlsManager.stop();
-
-        installQoreVscPkg(context.extensionPath, () => {}, () => {});
-    }));
-
-    // reinstall Qore VSCode package command
-    context.subscriptions.push(commands.registerCommand('qore-vscode.reinstallQoreVscPkg', async _config => {
-        if (!plaformHasQoreVscPkg()) {
-            return;
-        }
-
-        // stop QLS if it's running
-        await qlsManager.stop();
-
-        installQoreVscPkg(context.extensionPath, () => {}, () => {});
-    }));
-
-    // update Qore VSCode package command
-    // updates if installed version is lower than latest
-    context.subscriptions.push(commands.registerCommand('qore-vscode.updateQoreVscPkg', async _config => {
-        if (!plaformHasQoreVscPkg()) {
-            return;
-        }
-        const latestVer = getLatestQoreVscPkgVersion();
-        const currentVer = getInstalledQoreVscPkgVersion(context.extensionPath);
-        const result = compareVersion(latestVer, currentVer);
-        if (result === undefined || result == 1) {
-            // stop QLS if it's running
-            await qlsManager.stop();
-
-            installQoreVscPkg(context.extensionPath, () => {}, () => {});
-        }
-        else {
-            msg.info(t`LatestQoreVscPkgInstalled`);
-        }
-    }));
-
     // stop QLS command
-    context.subscriptions.push(commands.registerCommand('qore-vscode.stopQLS', _config => {
-        qlsManager.stop();
+    context.subscriptions.push(commands.registerCommand('qore-vscode.stopQLS', async _config => {
+        await qlsManager.stop();
     }));
 
     // start QLS command
-    context.subscriptions.push(commands.registerCommand('qore-vscode.startQLS', _config => {
+    context.subscriptions.push(commands.registerCommand('qore-vscode.startQLS', async _config => {
         if (qlsManager.started()) {
             msg.info(t`QLSAlreadyStarted`);
             return;
         }
 
-        doQLSLaunch(context.extensionPath, true, true);
+        await doQLSLaunch(true);
     }));
 }
 
@@ -361,24 +263,19 @@ function getNoDebugExportApi() {
             return "qore";
         },
 
-        async getDocumentSymbols(doc: QoreTextDocument, retType: string = 'symbols', timeout: number = 8000): Promise<any> {
-            const interval = 200;
-            let n = Math.ceil(Math.max(timeout, 0) / interval);
-            while (!qlsManager.languageClientReady() && --n) {
-                await new Promise(resolve => setTimeout(resolve, interval));
+        async getDocumentSymbols(
+            doc: QoreTextDocument,
+            retType: DocumentSymbolReturnType = 'symbols',
+            timeout = 8000,
+        ): Promise<unknown> {
+            if (!await qlsManager.waitUntilReady(timeout)) {
+                return null;
             }
             return getDocumentSymbolsImpl(qlsManager, doc, retType);
         },
 
-        async isLangClientAvailable(timeout: number = 8000): Promise<boolean> {
-            console.log(`isLangClientAvailable timeout: ${timeout}`);
-            const interval = 200;
-            let n = Math.ceil(Math.max(timeout, 0) / interval);
-            while (!qlsManager.languageClientReady() && --n) {
-                await new Promise(resolve => setTimeout(resolve, interval));
-            }
-            console.log(`languageClientReady n: ${n}`);
-            return Promise.resolve(!!n);
+        async isLangClientAvailable(timeout = 8000): Promise<boolean> {
+            return qlsManager.waitUntilReady(timeout);
         }
     };
     return api;
@@ -401,22 +298,19 @@ function getExportApi() {
             return getExecutableArguments(configuration);
         },
 
-        async getDocumentSymbols(doc: QoreTextDocument, retType: string = 'symbols', timeout: number = 8000): Promise<any> {
-            const interval = 200;
-            let n = Math.ceil(Math.max(timeout, 0) / interval);
-            while (!qlsManager.languageClientReady() && --n) {
-                await new Promise(resolve => setTimeout(resolve, interval));
+        async getDocumentSymbols(
+            doc: QoreTextDocument,
+            retType: DocumentSymbolReturnType = 'symbols',
+            timeout = 8000,
+        ): Promise<unknown> {
+            if (!await qlsManager.waitUntilReady(timeout)) {
+                return null;
             }
             return getDocumentSymbolsImpl(qlsManager, doc, retType);
         },
 
-        async isLangClientAvailable(timeout: number = 8000): Promise<boolean> {
-            const interval = 200;
-            let n = Math.ceil(Math.max(timeout, 0) / interval);
-            while (!qlsManager.languageClientReady() && --n) {
-                await new Promise(resolve => setTimeout(resolve, interval));
-            }
-            return Promise.resolve(!!n);
+        async isLangClientAvailable(timeout = 8000): Promise<boolean> {
+            return qlsManager.waitUntilReady(timeout);
         }
     };
     return api;
@@ -432,12 +326,23 @@ export async function activate(context: ExtensionContext) {
     registerCommands(context);
 
     // find out if QLS should run
-    let useQLS = workspace.getConfiguration("qore").get("useQLS");
-
-    //console.log(t`useQLS: ${useQLS}`);
+    const useQLS = workspace.getConfiguration('qore').get<boolean>('useQLS', true);
 
     // launch QLS
-    doQLSLaunch(context.extensionPath, useQLS, false);
+    await doQLSLaunch(useQLS);
+
+    context.subscriptions.push(workspace.onDidChangeConfiguration(event => {
+        if (!event.affectsConfiguration('qore.executable')
+                && !event.affectsConfiguration('qore.useQLS')) {
+            return;
+        }
+        void (async () => {
+            await qlsManager.stop();
+            qoreLaunchCfg = undefined;
+            const enabled = workspace.getConfiguration('qore').get<boolean>('useQLS', true);
+            await doQLSLaunch(enabled);
+        })().catch(error => msg.error(`Failed to reconfigure QLS: ${String(error)}`));
+    }));
 
     // modify debugAdapter to "/qvscdbg-test" and executable to "bash" just in case the adapter silently won't start and check command it log
     debugAdapter = findScript(context.extensionPath, workspace.getConfiguration("qore").get("debugAdapter") || "qdbg-vsc-adapter");

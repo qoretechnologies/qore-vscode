@@ -1,5 +1,12 @@
-import { QLSManager } from './QLSManager';
-import { Uri } from 'vscode';
+/* documentSymbols.ts Copyright 2026 Qore Technologies, s.r.o. */
+
+import {isAbsolute, resolve} from 'path';
+import {pathToFileURL} from 'url';
+import type {Uri} from 'vscode';
+
+import {QLSManager} from './QLSManager';
+
+export type DocumentSymbolReturnType = 'symbols' | 'node_info';
 
 export interface QoreTextDocument {
     uri: string | Uri;
@@ -8,45 +15,46 @@ export interface QoreTextDocument {
     version: number;
 }
 
-export function getDocumentSymbolsImpl(qlsManager: QLSManager, doc: QoreTextDocument, retType?: string): any {
-    // make sure uri is a string in the right format
-    let uri;
-    if (typeof doc.uri === 'string') {
-        uri = doc.uri;
-    } else {
-        if (doc.uri.fsPath) {
-            uri = 'file://' + doc.uri.fsPath;
-        } else if (doc.uri.path) {
-            uri = 'file://' + doc.uri.path;
-        } else {
-            return Promise.reject();
-        }
+export function normalizeDocumentUri(uri: string | Uri): string {
+    if (typeof uri !== 'string') {
+        return uri.toString();
     }
-
-    // fix incorrect file:// prefix
-    if (uri.match(/file:\/[^/]/)) {
-        uri = 'file://' + uri.slice(5);
+    if (isAbsolute(uri) || /^[A-Za-z]:[\\/]/.test(uri)) {
+        return pathToFileURL(resolve(uri)).toString();
     }
+    try {
+        return new URL(uri).toString();
+    } catch (_error) {
+        return pathToFileURL(resolve(uri)).toString();
+    }
+}
 
-    const newDoc = {
-        uri: uri,
-        text: doc.text,
-        languageId: doc.languageId,
-        version: doc.version
-    };
-    const params = {
-        textDocument: newDoc,
-        ... retType ? { retType } : {}
-    };
-    if (qlsManager.stopped()) {
-        return Promise.resolve(null);
+export async function getDocumentSymbolsImpl(
+    qlsManager: QLSManager,
+    doc: QoreTextDocument,
+    retType?: DocumentSymbolReturnType,
+): Promise<unknown> {
+    if (!qlsManager.languageClientReady()) {
+        return null;
     }
 
     try {
-        qlsManager.sendRequest('textDocument/didOpen', params);
-        return qlsManager.sendRequest('textDocument/documentSymbol', params);
-    }
-    catch (e){
-        return Promise.resolve(null);
+        const uri = normalizeDocumentUri(doc.uri);
+        const textDocument = {
+            uri,
+            text: doc.text,
+            languageId: doc.languageId,
+            version: doc.version,
+        };
+        const sent = await qlsManager.sendNotification('textDocument/didOpen', {textDocument});
+        if (!sent) {
+            return null;
+        }
+        return await qlsManager.sendRequest('textDocument/documentSymbol', {
+            textDocument: {uri},
+            ...(retType ? {retType} : {}),
+        });
+    } catch (_error) {
+        return null;
     }
 }

@@ -2,14 +2,14 @@
     "name": "qore-vscode",
     "displayName": "Qore",
     "description": "Qore language support for VS Code",
-    "version": "0.8.4",
+    "version": "0.9.0",
     "publisher": "qoretechnologies",
     "author": {
         "name": "Qore Technologies",
         "email": "vscode@qoretechnologies.com"
     },
     "engines": {
-        "vscode": "^1.75.0"
+        "vscode": "^1.91.0"
     },
     "license": "SEE LICENSE IN LICENSE.txt",
     "homepage": "https://github.com/qorelanguage/qore-vscode",
@@ -40,12 +40,13 @@
         "languageserver"
     ],
     "activationEvents": [
+        "onLanguage:qore",
         "onDebug",
         "onCommand:extension.qore-vscode.getFilename",
         "onCommand:extension.qore-vscode.getConnection",
         "onCommand:extension.qore-vscode.getProgram"
     ],
-    "main": "out/extension",
+    "main": "dist/extension.js",
     "contributes": {
         "languages": [
             {
@@ -60,17 +61,19 @@
                 },
                 "extensions": [
                     ".q",
+                    ".ql",
                     ".qc",
+                    ".qm",
+                    ".qr",
+                    ".qtest",
                     ".qclass",
-                    ".qconst",
+                    ".qconn",
+                    ".qwf",
+                    ".qsd",
                     ".qfd",
                     ".qjob",
-                    ".ql",
-                    ".qm",
-                    ".qsd",
+                    ".qconst",
                     ".qsm",
-                    ".qtest",
-                    ".qwf",
                     ".qstep",
                     ".qmc"
                 ],
@@ -97,8 +100,8 @@
             "properties": {
                 "qore.executable": {
                     "type": "string",
-                    "description": "Path to the Qore language interpreter (inluding the binary). Keep it empty to use system PATH one.",
-                    "default": null,
+                    "description": "Path to the Qore 3.0+ interpreter. Leave this as 'qore' to use PATH.",
+                    "default": "qore",
                     "scope": "window"
                 },
                 "qore.useQLS": {
@@ -159,18 +162,6 @@
             ]
         },
         "commands": [
-            {
-                "command": "qore-vscode.installQoreVscPkg",
-                "title": "Install Qore VSCode package"
-            },
-            {
-                "command": "qore-vscode.reinstallQoreVscPkg",
-                "title": "Reinstall Qore VSCode package"
-            },
-            {
-                "command": "qore-vscode.updateQoreVscPkg",
-                "title": "Update Qore VSCode package"
-            },
             {
                 "command": "qore-vscode.stopQLS",
                 "title": "Stop Qore Language Server (QLS)"
@@ -365,34 +356,34 @@
     },
     "scripts": {
         "vscode:prepublish": "npm run compile",
+        "precompile": "tsc -b --clean .",
         "compile": "tsc -p ./",
-        "lint": "tslint -p ./",
+        "postcompile": "npm run bundle",
+        "bundle": "esbuild src/extension.ts --bundle --platform=node --format=cjs --target=node20 --external:vscode --outfile=dist/extension.js --sourcemap --minify",
+        "lint": "tsc --noEmit -p ./",
         "watch": "tsc -watch -p ./",
-        "test": "npm run compile && node ./node_modules/vscode/bin/test",
+        "pretest": "npm run compile",
+        "test": "npm run test:unit",
+        "posttest": "npm run lint",
+        "test:unit": "node --enable-source-maps --test out/test/unit",
+        "pretest:qore3": "npm run compile",
+        "test:qore3": "node --enable-source-maps --test out/test/integration",
         "package": "vsce package",
         "publish": "vsce publish"
     },
     "devDependencies": {
-        "@types/glob": "^7.1.1",
-        "@types/mocha": "^7.0.2",
-        "@types/node": "^18.7.14",
-        "@types/vscode": "^1.75.1",
-        "glob": "^7.1.4",
-        "mocha": "^7.1.1",
-        "source-map-support": "^0.5.12",
-        "tslint": "^5.16.0",
-        "typescript": "^4.9",
-        "@vscode/debugadapter-testsupport": "^1.24.0",
-        "@vscode/test-electron": "^2.2.3"
+        "@types/node": "^24.13.3",
+        "@types/vscode": "1.91.0",
+        "esbuild": "^0.28.2",
+        "typescript": "^5.9.3",
+        "@vscode/vsce": "^3.9.2"
     },
     "dependencies": {
-        "extract-zip": "^2.0.0",
-        "fs-extra": "^9.0.0",
         "gettext-parser": "^4.0.3",
-        "sudo-prompt": "^9.1.1",
         "ttag": "^1.7.0",
-        "@vscode/debugadapter": "^1.24.0",
-        "@vscode/debugprotocol": "^1.24.0",
-        "vscode-languageclient": "^8.1.0"
+        "vscode-languageclient": "^10.1.1"
+    },
+    "overrides": {
+        "picomatch": "^2.3.2"
     }
 }

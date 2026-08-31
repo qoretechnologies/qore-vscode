@@ -1,155 +1,214 @@
-import { t } from 'ttag';
-import { CancellationToken } from 'vscode';
-import { LanguageClient, ServerOptions } from 'vscode-languageclient/node';
+/* QLSManager.ts Copyright 2026 Qore Technologies, s.r.o. */
 
-import { getClientOptions } from './clientOptions';
-import * as msg from './qore_message';
-import { QoreLaunchConfig } from './QoreLaunchConfig';
-import { getQoreVscPkgEnv, getQoreVscPkgQoreExecutable } from './qoreVscPkg';
-import { getServerArgs } from './serverArgs';
-import { getServerOptions } from './serverOptions';
+import type {CancellationToken} from 'vscode';
+import type {LanguageClientOptions, ServerOptions} from 'vscode-languageclient/node';
+
+import {QoreLaunchConfig} from './QoreLaunchConfig';
+import {getServerArgs} from './serverArgs';
+
+export interface QLSClient {
+    start(): Promise<void>;
+    stop(): Promise<void>;
+    sendRequest(method: string, params: unknown, token?: CancellationToken): Promise<unknown>;
+    sendNotification(method: string, params: unknown): Promise<void>;
+}
+
+export interface QLSManagerDependencies {
+    createClient(serverOptions: ServerOptions, clientOptions: LanguageClientOptions): QLSClient;
+    getClientOptions(): LanguageClientOptions;
+    getServerOptions(qoreExecutable: string, args: string[], config: QoreLaunchConfig): ServerOptions;
+    log(message: string): void;
+}
+
+function defaultDependencies(): QLSManagerDependencies {
+    return {
+        createClient(serverOptions, clientOptions): QLSClient {
+            // Lazy imports keep the lifecycle independently unit-testable outside VS Code.
+            const {LanguageClient} = require('vscode-languageclient/node');
+            return new LanguageClient(
+                'qls',
+                'Qore Language Server',
+                serverOptions,
+                clientOptions,
+            );
+        },
+        getClientOptions(): LanguageClientOptions {
+            return require('./clientOptions').getClientOptions();
+        },
+        getServerOptions(qoreExecutable, args, config): ServerOptions {
+            return require('./serverOptions').getServerOptions(
+                qoreExecutable,
+                args,
+                config.getLaunchOptions(),
+            );
+        },
+        log(message): void {
+            require('./qore_message').logPlusConsole(message);
+        },
+    };
+}
 
 export class QLSManager {
-    private _languageClient: LanguageClient | undefined = undefined;
-    private _languageClientReady: boolean = false;
-    private _startedQLS: boolean = false;
-    private _stoppingQLS: boolean = false;
+    private languageClient: QLSClient | undefined;
+    private ready = false;
+    private startPromise: Promise<void> | undefined;
+    private stopPromise: Promise<void> | undefined;
+    private readonly dependencies: QLSManagerDependencies;
 
-    constructor() {}
-
-    started() {
-        return this._startedQLS;
+    constructor(dependencies: QLSManagerDependencies = defaultDependencies()) {
+        this.dependencies = dependencies;
     }
 
-    stopped() {
-        return !this._startedQLS;
+    started(): boolean {
+        return this.languageClient !== undefined || this.startPromise !== undefined;
     }
 
-    languageClientReady() {
-        console.log(`languageClientReady(): ${this._languageClientReady}`)
-        return this._languageClientReady;
+    stopped(): boolean {
+        return !this.started();
     }
 
-    private launchLanguageClient(serverOptions: ServerOptions, clientOptions) {
-        this._languageClient = new LanguageClient(
-            'qls',
-            'Qore Language Server',
-            serverOptions,
-            clientOptions
-        );
-        this._languageClient.start();
-        this._languageClientReady = true;
-        this._startedQLS = true;
-        msg.log(t`StartedLanguageClient`);
+    languageClientReady(): boolean {
+        return this.ready;
     }
 
-    start(extensionPath: string, qoreExec: string, serverOptions?: ServerOptions) {
-        if (serverOptions === undefined) {
-            // language server command-line arguments
-            const serverArgs = getServerArgs(extensionPath);
-            const debugServerArgs = serverArgs;
-            console.log(t`serverArgs: ${JSON.stringify(serverArgs)}`);
-
-            // language server options
-            serverOptions = getServerOptions(
-                qoreExec,
-                serverArgs,
-                debugServerArgs
-            );
-        } else {
-            console.log(t`serverOptions: ${JSON.stringify(serverOptions)}`);
-        }
-
-        msg.logPlusConsole(t`StartingQLSWithExe ${qoreExec}`);
-
-        // options to control the language client
-        const clientOptions = getClientOptions();
-
-        // create the language client and start it
-        this.launchLanguageClient(serverOptions, clientOptions);
-        msg.logPlusConsole(t`StartedQLS`);
-    }
-
-    startWithQoreVscPkg(extensionPath: string) {
-        msg.logPlusConsole(t`StartingQLSVscPkg`);
-        const qoreExec = getQoreVscPkgQoreExecutable(extensionPath);
-        const env = getQoreVscPkgEnv(extensionPath);
-        const serverArgs = getServerArgs(extensionPath);
-        const serverOptions = getServerOptions(
-            qoreExec,
-            serverArgs,
-            serverArgs,
-            { env: env }
-        );
-        this.start(extensionPath, qoreExec, serverOptions);
-    }
-
-    startWithLaunchConfig(extensionPath: string, config: QoreLaunchConfig) {
-        console.log(t`QLSManager.startWithLaunchConfig() extensionPath: ${extensionPath}`);
-        const qoreExec = config.getQoreExec();
-        const env = config.getLaunchEnv();
-        const serverArgs = getServerArgs(extensionPath);
-        let serverOptions;
-        if (env !== undefined) {
-            serverOptions = getServerOptions(
-                qoreExec,
-                serverArgs,
-                serverArgs,
-                { env: env }
-            );
-        } else {
-            serverOptions = getServerOptions(
-                qoreExec,
-                serverArgs,
-                serverArgs,
-            );
-        }
-        this.start(extensionPath, qoreExec, serverOptions);
-    }
-
-    async stop() {
-        // return if already being stopped
-        if (this._stoppingQLS) {
-            return;
-        }
-        this._stoppingQLS = true;
-
-        // return if not running
-        if (!this._startedQLS || this._languageClient === undefined) {
-            msg.logPlusConsole(t`QLSAlreadyStopped`);
-            this._stoppingQLS = false;
-            return;
-        }
-
-        // stop the language client
-        msg.logPlusConsole(t`StoppingQLS`);
+    private log(message: string): void {
         try {
-            await this._languageClient.stop();
+            this.dependencies.log(message);
+        } catch (_error) {
+            // Logging must never change the language-client lifecycle.
         }
-        catch (err) {
-            msg.logPlusConsole("Failed stopping QLS: " + err);
-            this._stoppingQLS = false;
-            return;
-        }
-        this._languageClientReady = false;
-        this._startedQLS = false;
-        this._languageClient = undefined;
-
-        // wait for halfsecond until showing message and returning
-        await new Promise(done => setTimeout(done, 500));
-        msg.info(t`StoppedQLS`);
-        this._stoppingQLS = false;
-        return;
     }
 
-    sendRequest(method: string, params: any, token?: CancellationToken | undefined) {
-        if (this._languageClient === undefined) {
+    async waitUntilReady(timeoutMs = 8000): Promise<boolean> {
+        if (this.ready) {
+            return true;
+        }
+        const pendingStart = this.startPromise;
+        if (!pendingStart || timeoutMs <= 0) {
+            return false;
+        }
+
+        let timer: NodeJS.Timeout | undefined;
+        try {
+            return await Promise.race([
+                pendingStart.then(() => this.ready, () => false),
+                new Promise<boolean>(resolve => {
+                    timer = setTimeout(() => resolve(false), timeoutMs);
+                }),
+            ]);
+        } finally {
+            if (timer) {
+                clearTimeout(timer);
+            }
+        }
+    }
+
+    async startWithLaunchConfig(config: QoreLaunchConfig): Promise<void> {
+        if (this.stopPromise) {
+            await this.stopPromise;
+            return this.startWithLaunchConfig(config);
+        }
+        if (this.ready) {
+            return;
+        }
+        if (this.startPromise) {
+            return this.startPromise;
+        }
+
+        const qoreExecutable = config.getQoreExec();
+        const args = getServerArgs();
+        const serverOptions = this.dependencies.getServerOptions(qoreExecutable, args, config);
+        const clientOptions = this.dependencies.getClientOptions();
+        const client = this.dependencies.createClient(serverOptions, clientOptions);
+        this.log(`Starting QLS with Qore executable: ${qoreExecutable}`);
+        this.languageClient = client;
+
+        const operation = (async () => {
+            try {
+                await client.start();
+                if (this.languageClient === client && !this.stopPromise) {
+                    this.ready = true;
+                }
+                this.log('QLS language client started');
+            } catch (error) {
+                if (this.languageClient === client) {
+                    this.languageClient = undefined;
+                    this.ready = false;
+                }
+                try {
+                    await client.stop();
+                } catch (stopError) {
+                    this.log(`Failed cleaning up QLS after start failure: ${String(stopError)}`);
+                }
+                throw error;
+            }
+        })();
+        this.startPromise = operation;
+        try {
+            await operation;
+        } finally {
+            if (this.startPromise === operation) {
+                this.startPromise = undefined;
+            }
+        }
+    }
+
+    async stop(): Promise<void> {
+        if (this.stopPromise) {
+            return this.stopPromise;
+        }
+        if (!this.languageClient && !this.startPromise) {
+            return;
+        }
+
+        this.ready = false;
+        const pendingStart = this.startPromise;
+        const operation = (async () => {
+            if (pendingStart) {
+                try {
+                    await pendingStart;
+                } catch (_error) {
+                    return;
+                }
+            }
+
+            const client = this.languageClient;
+            if (!client) {
+                return;
+            }
+            this.log('Stopping QLS language client');
+            try {
+                await client.stop();
+                this.log('QLS language client stopped');
+            } finally {
+                if (this.languageClient === client) {
+                    this.languageClient = undefined;
+                }
+                this.ready = false;
+            }
+        })();
+        this.stopPromise = operation;
+        try {
+            await operation;
+        } finally {
+            if (this.stopPromise === operation) {
+                this.stopPromise = undefined;
+            }
+        }
+    }
+
+    sendRequest(method: string, params: unknown, token?: CancellationToken): Promise<unknown> {
+        if (!this.ready || !this.languageClient) {
             return Promise.resolve(null);
         }
-        if (token !== undefined) {
-            return this._languageClient.sendRequest(method, params, token);
-        } else {
-            return this._languageClient.sendRequest(method, params);
+        return this.languageClient.sendRequest(method, params, token);
+    }
+
+    async sendNotification(method: string, params: unknown): Promise<boolean> {
+        if (!this.ready || !this.languageClient) {
+            return false;
         }
+        await this.languageClient.sendNotification(method, params);
+        return true;
     }
 }

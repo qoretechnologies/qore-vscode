@@ -1,66 +1,88 @@
 # qore-vscode
 
-**qore-vscode** is an extension for Visual Studio Code adding
-[Qore](http://qore.org/) language support.
+**qore-vscode** adds [Qore](https://qore.org/) language support to Visual Studio Code.
 
-## Version 0.8.4 (2023-11-18)
+## Version 0.9.0 (2026-08-31)
 
-- fixed bugs when there were UNIX socket files in directories to be scanned
+- Requires Qore 3.0 or newer.
+- Runs the `QLS` module integrated with Qore 3.0; the former `qls` submodule and wrapper script are no longer bundled.
+- Supports `.qr` modern scripts and the complete Qore/Qorus source-extension set.
+- Adds Qore 3 syntax highlighting and snippets for enums, typedefs, character and buffer types,
+  streaming operators, `@assert`, and `@debug`.
+- Starts and stops the language client deterministically and restarts it when the configured Qore executable changes.
 
-## Version 0.8.3 (2023-11-15)
+See [CHANGELOG.md](CHANGELOG.md) for older releases.
 
-- fixed bugs in the Qore Language Server when there are unreadable files in the directory to be scanned
+## Requirements
 
-## Version 0.8.2 (2023-06-26)
+Install Qore 3.0 or newer with its standard `astparser` binary module and `QLS` Qore module. A normal Qore 3
+installation includes both. Set `qore.executable` to the interpreter path when it is not available as `qore`
+on the VS Code process's `PATH`:
 
-- (Really) fixed the bug where the extension reported that Qore was not available when installed manually by updating to use the latest internal VSCode APIs
+```json
+{
+    "qore.executable": "/usr/bin/qore",
+    "qore.useQLS": true
+}
+```
 
-## Version 0.8.1 (2023-06-06)
+The extension validates both the Qore version and `-l QLS` before starting the language server. It launches the
+configured interpreter directly, so paths containing spaces are supported and a different `qls` executable cannot
+be selected accidentally from `PATH`.
 
-- Updated the module to use a Qore package build for macOS Catalina for x86_64 for maximum backwards compatibility
+When testing an uninstalled Qore build, start VS Code with the build environment available. For example:
 
-## Version 0.8.0 (2023-05-25)
+```bash
+LD_LIBRARY_PATH=/path/to/qore/build \
+QORE_MODULE_DIR=/path/to/qore/build/modules/astparser:/path/to/qore/build/modules/reflection:/path/to/qore/build/modules/json:/path/to/qore/qlib \
+code /path/to/workspace
+```
 
-- Fixed a bug where the extension reported that Qore was not available when installed manually
-- Updated Qore packages to use v1.16.0
-
-## Version 0.7.7 (2022-05-10)
-
-- Updated qls to avoid warnings with newer versions of Qore
-
-## Version 0.7.6 (2022-05-10)
-
-- Added Qore language icon to all associated Qore files
-
-## Dependencies
-
-**Qore 0.9.3+ has to be installed, including the `qdbg-vsc-adapter`, for all the functionality including the debugging support to work.**
-
-**Qore 0.8.13+ has to be installed, including the `astparser` and `json` modules, for all the functionality to work except the debugging.**
-
-On Windows and macOS, if you don't have Qore installed, a warning message will be shown
-when the extension is activated asking you if you want to download the
-Qore VSCode package. If you select "Yes", a Qore package will be downloaded
-and installed into the extension directory. This will provide Qore
-and necessary modules for the Qore Language Server to run.
+Debugging additionally requires `qdbg-vsc-adapter` in `PATH`, beside the extension, or at the path configured by
+`qore.debugAdapter`.
 
 ## Features
 
 This extension adds support for the following:
 
 - Syntax highlighting
+- Completion and signature help
 - Hover info
 - Goto definition
 - Find references
 - Document symbol search
 - Workspace symbol search
 - Syntax error reporting
-- Debbuger, requires Qore 0.9.3+ with `qdbg-vsc-adapter`
+- Document formatting
+- Semantic tokens
+- Debugger integration through `qdbg-vsc-adapter`
 
-Most of the features (except syntax highlighting) are provided by
-[QLS](https://github.com/qorelanguage/qls) (Qore Language Server).
-In order for QLS to function properly you need to have [Qore](http://qore.org/) 0.8.13+
-installed on your system, including the `astparser` and `json` modules.
+Most features other than syntax highlighting are provided by the
+[QLS module](https://github.com/qorelanguage/qore/tree/develop/qlib/QLS) included in Qore 3.
+
+Recognized source extensions are `.q`, `.ql`, `.qc`, `.qm`, `.qr`, `.qtest`, `.qclass`, `.qconn`, `.qwf`,
+`.qsd`, `.qfd`, `.qjob`, `.qconst`, `.qsm`, `.qstep`, and `.qmc`.
+
+## Development
+
+Use Node 24 for builds and tests:
+
+```bash
+nvm use v24
+npm ci
+npm test
+```
+
+The live integration test requires a Qore 3 build and its local module paths:
+
+```bash
+QORE_TEST_EXECUTABLE=/path/to/qore/build/qore \
+LD_LIBRARY_PATH=/path/to/qore/build \
+QORE_MODULE_DIR=/path/to/qore/build/modules/astparser:/path/to/qore/build/modules/reflection:/path/to/qore/build/modules/json:/path/to/qore/qlib \
+npm run test:qore3
+```
+
+Run `npm run package` to build the production bundle and VSIX.
 
 ## QLS Logging
 
@@ -70,7 +92,7 @@ If you want to log output of QLS, you can use the following configuration settin
 - `qore.logging` Boolean flag to set logging on or off. [default=false]
 - `qore.logFile` String specifying QLS log file path. If logging is turned on, all the operations will be logged to this file. If not defined, `~/.qls.log` is used on Unix-like systems and `%AppData%\QLS\qls.log` on Windows.
 - `qore.logVerbosity` Verbosity of QLS logging. From 0 to 2. [default=0]
-- `qore.appendToLog` Boolean flag specifying whether to append to QLS log file or to overwrite it on each restart. [default=true]
+- `qore.appendToLog` Boolean flag specifying whether to append to the QLS log file or overwrite it on each restart. [default=false]
 
 ## Debugging
 
