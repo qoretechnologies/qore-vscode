@@ -6,6 +6,7 @@ import {test} from 'node:test';
 
 import {isQore3OrNewer} from '../../qore3';
 import {getServerArgs} from '../../serverArgs';
+import {parseShowReferencesArgs, SHOW_REFERENCES_COMMAND} from '../../showReferences';
 
 interface JsonRpcResponse {
     id: number;
@@ -139,6 +140,27 @@ test('Qore 3 launches its integrated QLS module and serves LSP requests', async 
             start: {line: 1, character: 0},
             end: {line: 1, character: 19},
         });
+
+        // reference-count code lenses run the command that the extension registers
+        const lensUri = 'file:///tmp/qore-vscode-qore3-lens.qr';
+        connection.notification('textDocument/didOpen', {
+            textDocument: {
+                uri: lensUri,
+                languageId: 'qore',
+                version: 1,
+                text: 'int sub foo() {\n    return 1;\n}\nfoo();\n',
+            },
+        });
+        const lenses = await connection.request(4, 'textDocument/codeLens', {textDocument: {uri: lensUri}});
+        assert.equal(lenses.error, undefined);
+        const lensList = lenses.result as Array<{data: {name: string}}>;
+        assert.deepEqual(lensList.map(lens => lens.data.name), ['foo']);
+        const resolved = await connection.request(5, 'codeLens/resolve', lensList[0]);
+        assert.equal(resolved.error, undefined);
+        const command = (resolved.result as {command: {command: string; arguments: unknown[]}}).command;
+        assert.equal(command.command, SHOW_REFERENCES_COMMAND);
+        assert.equal(parseShowReferencesArgs(command.arguments)?.uri, lensUri,
+            'the extension can parse the lens command arguments');
 
         const shutdown = await connection.request(3, 'shutdown', null);
         assert.equal(shutdown.error, undefined);

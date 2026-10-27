@@ -26,6 +26,12 @@ const grammar = JSON.parse(
     readFileSync(resolve(root, 'syntaxes/qore.tmLanguage.json'), 'utf8'),
 ) as Grammar;
 const snippets = JSON.parse(readFileSync(resolve(root, 'snippets/qore.json'), 'utf8'));
+const languageConfig = JSON.parse(readFileSync(resolve(root, 'qore.configuration.json'), 'utf8'));
+
+//! returns the words that the language configuration's word pattern finds in the text
+function words(text: string): string[] {
+    return text.match(new RegExp(languageConfig.wordPattern, 'g')) ?? [];
+}
 
 function matchFor(repositoryName: string, scopeName: string): RegExp {
     const pattern = grammar.repository[repositoryName].patterns.find(entry => entry.name === scopeName);
@@ -39,6 +45,67 @@ describe('Qore 3 language assets', () => {
         assert.deepEqual(extensions, QORE_SOURCE_EXTENSIONS.map(ext => `.${ext}`));
         assert.equal(new Set(extensions).size, extensions.length);
         assert.ok(packageJson.activationEvents.includes('onLanguage:qore'));
+    });
+
+    it('activates when the workspace contains Qore source files of any extension', () => {
+        const event = packageJson.activationEvents.find((e: string) => e.startsWith('workspaceContains:'));
+        assert.equal(event, `workspaceContains:**/*.{${QORE_SOURCE_EXTENSIONS.join(',')}}`);
+    });
+
+    it('declares the non-standard semantic token modifiers in the QLS legend', () => {
+        const modifiers = packageJson.contributes.semanticTokenModifiers.map((m: {id: string}) => m.id);
+        assert.deepEqual(modifiers, ['documentation']);
+        const scopes = packageJson.contributes.semanticTokenScopes.find(
+            (s: {language: string}) => s.language === 'qore');
+        assert.deepEqual(scopes.scopes['comment.documentation'], ['comment.block.documentation.qore']);
+    });
+
+    it('selects Qore variables, members and scoped names as words', () => {
+        assert.deepEqual(words('$var + $.member'), ['$var', '$.member']);
+        assert.deepEqual(words('Ns::Class::method(arg_1)'), ['Ns', 'Class', 'method', 'arg_1']);
+        assert.deepEqual(words('x = 3.14 + .5'), ['x', '3.14', '.5']);
+    });
+
+    it('indents after opening brackets but not in comments', () => {
+        const increase = new RegExp(languageConfig.indentationRules.increaseIndentPattern);
+        const decrease = new RegExp(languageConfig.indentationRules.decreaseIndentPattern);
+        for (const line of ['class Foo {', 'if (x) {', 'list l = (', 'hash h = {', 'call(a,']) {
+            assert.match(line, increase, line);
+        }
+        for (const line of ['x = {};', '# comment {', 'string s = "{";', 'foo();']) {
+            assert.doesNotMatch(line, increase, line);
+        }
+        for (const line of ['}', '    }', ')', '];']) {
+            assert.match(line, decrease, line);
+        }
+        assert.doesNotMatch('x = 1;', decrease);
+    });
+
+    it('continues doc comments on enter', () => {
+        const rules = languageConfig.onEnterRules as Array<{beforeText: string; afterText?: string;
+            action: {appendText?: string; removeText?: number}}>;
+        const appendFor = (before: string, after = ''): string | undefined => rules.find(rule =>
+            new RegExp(rule.beforeText).test(before)
+                && (!rule.afterText || new RegExp(rule.afterText).test(after)))?.action.appendText;
+        assert.equal(appendFor('/**', ' */'), ' * ');
+        assert.equal(appendFor('    /** Returns the value'), ' * ');
+        assert.equal(appendFor('     * @param x the value'), '* ');
+        assert.equal(appendFor('/* plain comment'), undefined);
+        assert.equal(appendFor('x = 1;'), undefined);
+        const closing = rules.find(rule => new RegExp(rule.beforeText).test('     */'));
+        assert.equal(closing?.action.removeText, 1);
+    });
+
+    it('does not auto-close quotes in strings and comments, and folds regions', () => {
+        const pairs = languageConfig.autoClosingPairs as Array<{open: string; notIn?: string[]}>;
+        for (const quote of ['"', "'", '`']) {
+            assert.deepEqual(pairs.find(pair => pair.open === quote)?.notIn, ['string', 'comment']);
+        }
+        const start = new RegExp(languageConfig.folding.markers.start);
+        const end = new RegExp(languageConfig.folding.markers.end);
+        assert.match('    # region Helpers', start);
+        assert.match('# endregion', end);
+        assert.doesNotMatch('# regional data', start);
     });
 
     it('highlights Qore 3 declaration and data types', () => {

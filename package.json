@@ -41,6 +41,7 @@
     ],
     "activationEvents": [
         "onLanguage:qore",
+        "workspaceContains:**/*.{q,ql,qc,qm,qr,qtest,qclass,qconn,qwf,qsd,qfd,qjob,qconst,qsm,qstep,qmc}",
         "onDebug",
         "onCommand:extension.qore-vscode.getFilename",
         "onCommand:extension.qore-vscode.getConnection",
@@ -142,6 +143,39 @@
                     "description": "Path to the Qore VDA adapter (inluding the script file name).",
                     "default": null,
                     "scope": "window"
+                },
+                "qore.index.excludeDirs": {
+                    "type": [
+                        "array",
+                        "null"
+                    ],
+                    "items": {
+                        "type": "string",
+                        "minLength": 1
+                    },
+                    "default": null,
+                    "scope": "window",
+                    "markdownDescription": "Shell-style glob patterns (`*` and `?`) for directory names that QLS does not search for Qore source files, for example `[\".git\", \"node_modules\", \"build*\", \"generated\"]`. Replaces the QLS defaults (`.git`, `.hg`, `.svn`, `.claude`, `.vscode-test`, `node_modules`, `build`, `build-*`); leave unset to use them. Changing this setting restarts QLS."
+                },
+                "qore.index.maxFileSize": {
+                    "type": [
+                        "integer",
+                        "null"
+                    ],
+                    "minimum": 0,
+                    "default": null,
+                    "scope": "window",
+                    "markdownDescription": "Qore source files larger than this many bytes are not indexed by QLS; `0` means no limit. Leave unset to use the QLS default (8 MiB). Changing this setting restarts QLS."
+                },
+                "qore.index.treeCacheSize": {
+                    "type": [
+                        "integer",
+                        "null"
+                    ],
+                    "minimum": 0,
+                    "default": null,
+                    "scope": "window",
+                    "markdownDescription": "QLS keeps the syntax trees of recently used files that are not open in the editor up to this many bytes of source; a syntax tree takes about 20 times the size of its source in memory. `0` disables the cache. Leave unset to use the QLS default (8 MiB). Changing this setting restarts QLS."
                 }
             }
         },
@@ -352,6 +386,22 @@
                     }
                 ]
             }
+        ],
+        "semanticTokenModifiers": [
+            {
+                "id": "documentation",
+                "description": "Documentation, such as a doc comment"
+            }
+        ],
+        "semanticTokenScopes": [
+            {
+                "language": "qore",
+                "scopes": {
+                    "comment.documentation": [
+                        "comment.block.documentation.qore"
+                    ]
+                }
+            }
         ]
     },
     "scripts": {
@@ -365,9 +415,9 @@
         "pretest": "npm run compile",
         "test": "npm run test:unit",
         "posttest": "npm run lint",
-        "test:unit": "node --enable-source-maps --test out/test/unit",
+        "test:unit": "node --enable-source-maps --test out/test/unit/*.test.js",
         "pretest:qore3": "npm run compile",
-        "test:qore3": "node --enable-source-maps --test out/test/integration",
+        "test:qore3": "node --enable-source-maps --test out/test/integration/*.test.js",
         "package": "vsce package",
         "publish": "vsce publish"
     },

@@ -16,7 +16,9 @@ import {
     DebugConfigurationProvider,
     DebugSession,
     ExtensionContext,
+    Position,
     ProviderResult,
+    Uri,
     window,
     workspace,
     WorkspaceFolder
@@ -27,6 +29,7 @@ import {
     getDocumentSymbolsImpl,
     QoreTextDocument,
 } from './documentSymbols';
+import { QLS_INIT_SETTINGS } from './initializationOptions';
 import { QLSManager } from './QLSManager';
 import { QoreLaunchConfig } from './QoreLaunchConfig';
 import {
@@ -35,6 +38,7 @@ import {
     checkQoreLaunchConfig,
 } from './qoreChecks';
 import * as msg from './qore_message';
+import { SHOW_REFERENCES_COMMAND, showReferences } from './showReferences';
 import { findScript } from './utils';
 
 let qlsManager: QLSManager = new QLSManager();
@@ -160,6 +164,15 @@ function registerCommands(context: ExtensionContext) {
 
         await doQLSLaunch(true);
     }));
+
+    // shows the references of a QLS reference-count code lens
+    context.subscriptions.push(commands.registerCommand(SHOW_REFERENCES_COMMAND, (...args: unknown[]) =>
+        showReferences<Uri, Position>({
+            parseUri: uri => Uri.parse(uri, true),
+            makePosition: (line, character) => new Position(line, character),
+            executeCommand: (command, ...commandArgs) => commands.executeCommand(command, ...commandArgs),
+            showWarning: message => msg.warning(message),
+        }, ...args)));
 }
 
 function pushDebugSubscriptions(context: ExtensionContext) {
@@ -254,6 +267,13 @@ function pushDebugSubscriptions(context: ExtensionContext) {
     }));
 }
 
+//! returns true if the document is open in the editor and synchronized with QLS by the language client
+function isSyncedWithQLS(uri: string): boolean {
+    const target = Uri.parse(uri, true).toString();
+    return workspace.textDocuments.some(doc => doc.uri.scheme === 'file' && doc.languageId === 'qore'
+        && doc.uri.toString() === target);
+}
+
 function getNoDebugExportApi() {
     const api = {
         getQoreExecutable(): string {
@@ -271,7 +291,7 @@ function getNoDebugExportApi() {
             if (!await qlsManager.waitUntilReady(timeout)) {
                 return null;
             }
-            return getDocumentSymbolsImpl(qlsManager, doc, retType);
+            return getDocumentSymbolsImpl(qlsManager, doc, retType, isSyncedWithQLS);
         },
 
         async isLangClientAvailable(timeout = 8000): Promise<boolean> {
@@ -306,7 +326,7 @@ function getExportApi() {
             if (!await qlsManager.waitUntilReady(timeout)) {
                 return null;
             }
-            return getDocumentSymbolsImpl(qlsManager, doc, retType);
+            return getDocumentSymbolsImpl(qlsManager, doc, retType, isSyncedWithQLS);
         },
 
         async isLangClientAvailable(timeout = 8000): Promise<boolean> {
@@ -333,7 +353,8 @@ export async function activate(context: ExtensionContext) {
 
     context.subscriptions.push(workspace.onDidChangeConfiguration(event => {
         if (!event.affectsConfiguration('qore.executable')
-                && !event.affectsConfiguration('qore.useQLS')) {
+                && !event.affectsConfiguration('qore.useQLS')
+                && !event.affectsConfiguration(QLS_INIT_SETTINGS)) {
             return;
         }
         void (async () => {

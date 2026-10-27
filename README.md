@@ -10,6 +10,8 @@
 - Adds Qore 3 syntax highlighting and snippets for enums, typedefs, character and buffer types,
   streaming operators, `@assert`, and `@debug`.
 - Starts and stops the language client deterministically and restarts it when the configured Qore executable changes.
+- Adds `qore.index.*` settings for QLS workspace indexing, the command run by reference-count code lenses, and
+  doc-comment, indentation and bracket editing rules.
 
 See [CHANGELOG.md](CHANGELOG.md) for older releases.
 
@@ -45,16 +47,17 @@ Debugging additionally requires `qdbg-vsc-adapter` in `PATH`, beside the extensi
 
 This extension adds support for the following:
 
-- Syntax highlighting
-- Completion and signature help
+- Syntax highlighting and semantic tokens
+- Completion, signature help and inlay hints
 - Hover info
-- Goto definition
-- Find references
-- Document symbol search
-- Workspace symbol search
+- Go to definition, type definition and implementation
+- Find references, rename, and reference-count code lenses
+- Call and type hierarchies
+- Document and workspace symbol search
 - Syntax error reporting
-- Document formatting
-- Semantic tokens
+- Document and on-type formatting
+- Folding, selection ranges, document highlights and source actions
+- Comment continuation, indentation and bracket rules for the editor
 - Debugger integration through `qdbg-vsc-adapter`
 
 Most features other than syntax highlighting are provided by the
@@ -65,13 +68,16 @@ Recognized source extensions are `.q`, `.ql`, `.qc`, `.qm`, `.qr`, `.qtest`, `.q
 
 ## Development
 
-Use Node 24 for builds and tests:
+Use Node 24 for builds and tests, as in the Qore and Qorus projects; `.nvmrc` selects it:
 
 ```bash
-nvm use v24
+nvm use
 npm ci
 npm test
 ```
+
+The extension itself runs in the Node.js runtime built into VS Code, so the bundle targets the Node.js version of
+the oldest supported VS Code release (`engines.vscode` in `package.json`), not the development toolchain.
 
 The live integration test requires a Qore 3 build and its local module paths:
 
@@ -83,6 +89,30 @@ npm run test:qore3
 ```
 
 Run `npm run package` to build the production bundle and VSIX.
+
+## Workspace Indexing
+
+QLS starts when a Qore file is opened or when the workspace contains Qore source files, and indexes the
+workspace's Qore files so that workspace symbols, definitions and references work across files. Files that are
+not open are kept as compact symbol indexes; their syntax trees are parsed when a request needs them.
+
+These settings control indexing; changing them restarts QLS:
+
+- `qore.index.excludeDirs` Glob patterns (`*` and `?`) for directory names that are not searched for Qore files,
+  replacing the QLS defaults (`.git`, `.hg`, `.svn`, `.claude`, `.vscode-test`, `node_modules`, `build`,
+  `build-*`). [default=QLS defaults]
+- `qore.index.maxFileSize` Files larger than this many bytes are not indexed; `0` means no limit. [default=8 MiB]
+- `qore.index.treeCacheSize` Syntax trees of files that are not open are cached up to this many bytes of source;
+  a syntax tree takes about 20 times the size of its source in memory. `0` disables the cache. [default=8 MiB]
+
+For example, to also skip generated code and allow more memory for cached syntax trees:
+
+```json
+{
+    "qore.index.excludeDirs": [".git", "node_modules", "build*", "generated"],
+    "qore.index.treeCacheSize": 33554432
+}
+```
 
 ## QLS Logging
 

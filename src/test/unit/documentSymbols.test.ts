@@ -15,22 +15,35 @@ import {QoreLaunchConfig} from '../../QoreLaunchConfig';
 
 class ProtocolClient implements QLSClient {
     readonly calls: Array<{kind: 'notification' | 'request'; method: string; params: unknown}> = [];
+    //! called when a request is received; the request completes when the returned promise resolves
+    onRequest: () => Promise<void> = async () => {};
 
-    constructor(private readonly failNotification = false) {}
+    constructor(
+        private readonly failNotification: string | undefined = undefined,
+        private readonly failRequest = false,
+    ) {}
 
     async start(): Promise<void> {}
     async stop(): Promise<void> {}
 
     async sendNotification(method: string, params: unknown): Promise<void> {
         this.calls.push({kind: 'notification', method, params});
-        if (this.failNotification) {
+        if (this.failNotification === method) {
             throw new Error('notification failed');
         }
     }
 
     async sendRequest(method: string, params: unknown): Promise<unknown> {
         this.calls.push({kind: 'request', method, params});
+        await this.onRequest();
+        if (this.failRequest) {
+            throw new Error('request failed');
+        }
         return [{name: 'UserId', kind: 26}];
+    }
+
+    methods(): string[] {
+        return this.calls.map(call => call.method);
     }
 }
 
@@ -68,7 +81,7 @@ describe('document symbol bridge', () => {
         assert.equal(normalizeDocumentUri(uri), 'untitled:Qore-1');
     });
 
-    it('opens the document with a notification before requesting symbols', async () => {
+    it('opens the document for the request and closes it afterwards', async () => {
         const client = new ProtocolClient();
         const manager = managerFor(client);
         await manager.startWithLaunchConfig(new QoreLaunchConfig('qore'));
@@ -97,7 +110,78 @@ describe('document symbol bridge', () => {
                     retType: 'node_info',
                 },
             },
+            {
+                kind: 'notification',
+                method: 'textDocument/didClose',
+                params: {
+                    textDocument: {uri: 'file:///tmp/project/source%20file.qr'},
+                },
+            },
         ]);
+    });
+
+    it('queries documents open in the editor without opening or closing them', async () => {
+        const client = new ProtocolClient();
+        const manager = managerFor(client);
+        await manager.startWithLaunchConfig(new QoreLaunchConfig('qore'));
+        const checked: string[] = [];
+        const result = await getDocumentSymbolsImpl(manager, document, undefined, uri => {
+            checked.push(uri);
+            return true;
+        });
+
+        assert.deepEqual(result, [{name: 'UserId', kind: 26}]);
+        assert.deepEqual(checked, ['file:///tmp/project/source%20file.qr']);
+        assert.deepEqual(client.methods(), ['textDocument/documentSymbol']);
+    });
+
+    it('closes the document when the symbol request fails', async () => {
+        const client = new ProtocolClient(undefined, true);
+        const manager = managerFor(client);
+        await manager.startWithLaunchConfig(new QoreLaunchConfig('qore'));
+
+        assert.equal(await getDocumentSymbolsImpl(manager, document), null);
+        assert.deepEqual(client.methods(),
+            ['textDocument/didOpen', 'textDocument/documentSymbol', 'textDocument/didClose']);
+    });
+
+    it('returns the symbols when closing the document fails', async () => {
+        const client = new ProtocolClient('textDocument/didClose');
+        const manager = managerFor(client);
+        await manager.startWithLaunchConfig(new QoreLaunchConfig('qore'));
+
+        assert.deepEqual(await getDocumentSymbolsImpl(manager, document), [{name: 'UserId', kind: 26}]);
+        assert.deepEqual(client.methods(),
+            ['textDocument/didOpen', 'textDocument/documentSymbol', 'textDocument/didClose']);
+    });
+
+    it('serializes concurrent requests for the same document', async () => {
+        const client = new ProtocolClient();
+        const manager = managerFor(client);
+        await manager.startWithLaunchConfig(new QoreLaunchConfig('qore'));
+        let release: () => void = () => {};
+        const firstRequestBlocked = new Promise<void>(resolveBlock => {
+            release = resolveBlock;
+        });
+        let requests = 0;
+        client.onRequest = () => ++requests === 1 ? firstRequestBlocked : Promise.resolve();
+
+        const first = getDocumentSymbolsImpl(manager, document);
+        const second = getDocumentSymbolsImpl(manager, document);
+        const other = getDocumentSymbolsImpl(manager, {...document, uri: '/tmp/project/other.q'});
+        // the other document is not blocked by the first request
+        assert.deepEqual(await other, [{name: 'UserId', kind: 26}]);
+        release();
+        assert.deepEqual(await first, [{name: 'UserId', kind: 26}]);
+        assert.deepEqual(await second, [{name: 'UserId', kind: 26}]);
+
+        const sourceCalls = client.calls
+            .filter(call => JSON.stringify(call.params).includes('source%20file'))
+            .map(call => call.method);
+        assert.deepEqual(sourceCalls, [
+            'textDocument/didOpen', 'textDocument/documentSymbol', 'textDocument/didClose',
+            'textDocument/didOpen', 'textDocument/documentSymbol', 'textDocument/didClose',
+        ], 'the second request opens the document after the first one closed it');
     });
 
     it('omits the optional return type for standard document symbols', async () => {
@@ -117,7 +201,7 @@ describe('document symbol bridge', () => {
         assert.equal(await getDocumentSymbolsImpl(stoppedManager, document), null);
         assert.deepEqual(stoppedClient.calls, []);
 
-        const failedClient = new ProtocolClient(true);
+        const failedClient = new ProtocolClient('textDocument/didOpen');
         const failedManager = managerFor(failedClient);
         await failedManager.startWithLaunchConfig(new QoreLaunchConfig('qore'));
         assert.equal(await getDocumentSymbolsImpl(failedManager, document), null);

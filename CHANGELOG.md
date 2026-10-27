@@ -14,6 +14,16 @@
   escapes, streaming operators, `@assert`, and `@debug`.
 - Updates the Node 24 build/test/package toolchain and adds unit and live Qore 3/QLS integration coverage.
 - Removes the obsolete Qore 1.16 packaged-runtime installer.
+- Registers the `qls.showReferences` command used by QLS reference-count code lenses (#36).
+- The `getDocumentSymbols()` API closes documents that it opens in QLS and queries documents open in the editor
+  directly, so QLS does not keep their syntax trees (#37).
+- Adds the `qore.index.excludeDirs`, `qore.index.maxFileSize` and `qore.index.treeCacheSize` settings, sent to QLS
+  as initialization options (#40).
+- Declares the QLS `documentation` semantic token modifier (#46).
+- Adds word, indentation, doc-comment continuation, folding-region and bracket-colorization rules, and does not
+  auto-close quotes in strings and comments (#47).
+- Activates when the workspace contains Qore source files (#48).
+- Unit test scripts run on Node 24; adds `.nvmrc`.
 
 ## 0.8.4
 

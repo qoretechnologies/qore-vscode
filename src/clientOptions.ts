@@ -2,15 +2,18 @@
 
 import { LanguageClientOptions } from 'vscode-languageclient/node';
 import { workspace } from 'vscode';
+import { getInitializationOptions, QLS_INIT_SETTINGS } from './initializationOptions';
 import { QORE_SOURCE_EXTENSIONS } from './qore3';
 
 //! options to control the language client
 export function getClientOptions(): LanguageClientOptions {
+    const indexConfig = workspace.getConfiguration(QLS_INIT_SETTINGS);
     const clientOptions: LanguageClientOptions = {
         // docs regarding documentSelector:
         // https://code.visualstudio.com/Docs/extensionAPI/vscode-api#DocumentSelector
         // https://code.visualstudio.com/Docs/extensionAPI/vscode-api#DocumentFilter
         documentSelector: [{scheme: 'file', language: 'qore'}],
+        initializationOptions: getInitializationOptions(key => indexConfig.get(key)),
         synchronize: {
             // synchronize the setting section 'qore' to the server
             configurationSection: 'qore',
